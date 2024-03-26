@@ -23,6 +23,7 @@ import (
 	"io"
 	"path/filepath"
 	"time"
+	"os"
 
 	"cloud.google.com/go/storage"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -73,7 +74,8 @@ func (f *fs) List(ctx context.Context, glob string) ([]string, error) {
 	// For now, we assume * is the first matching character to make a
 	// prefix listing and not list the entire bucket.
 	prefix := fsx.GetPrefix(object)
-	it := f.client.Bucket(bucket).Objects(ctx, &storage.Query{
+	userProject := os.Getenv("GCP_STORAGE_PROJECT_ID")
+	it := f.client.Bucket(bucket).UserProject(userProject).Objects(ctx, &storage.Query{
 		Prefix: prefix,
 	})
 	for {
