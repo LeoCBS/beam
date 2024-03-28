@@ -77,6 +77,7 @@ func (f *fs) List(ctx context.Context, glob string) ([]string, error) {
 	// For now, we assume * is the first matching character to make a
 	// prefix listing and not list the entire bucket.
 	prefix := fsx.GetPrefix(object)
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	it := f.client.Bucket(bucket).UserProject(userProject).Objects(ctx, &storage.Query{
 		Prefix: prefix,
 	})
@@ -110,7 +111,7 @@ func (f *fs) OpenRead(ctx context.Context, filename string) (io.ReadCloser, erro
 	if err != nil {
 		return nil, err
 	}
-
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	return f.client.Bucket(bucket).UserProject(userProject).Object(object).NewReader(ctx)
 }
 
@@ -121,7 +122,7 @@ func (f *fs) OpenWrite(ctx context.Context, filename string) (io.WriteCloser, er
 	if err != nil {
 		return nil, err
 	}
-
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	return f.client.Bucket(bucket).UserProject(userProject).Object(object).NewWriter(ctx), nil
 }
 
@@ -130,7 +131,7 @@ func (f *fs) Size(ctx context.Context, filename string) (int64, error) {
 	if err != nil {
 		return -1, err
 	}
-
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	obj := f.client.Bucket(bucket).UserProject(userProject).Object(object)
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
@@ -146,7 +147,7 @@ func (f *fs) LastModified(ctx context.Context, filename string) (time.Time, erro
 	if err != nil {
 		return time.Time{}, err
 	}
-
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	obj := f.client.Bucket(bucket).UserProject(userProject).Object(object)
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
@@ -162,7 +163,7 @@ func (f *fs) Remove(ctx context.Context, filename string) error {
 	if err != nil {
 		return err
 	}
-
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	obj := f.client.Bucket(bucket).UserProject(userProject).Object(object)
 	return obj.Delete(ctx)
 }
@@ -173,12 +174,14 @@ func (f *fs) Copy(ctx context.Context, srcpath, dstpath string) error {
 	if err != nil {
 		return err
 	}
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	srcobj := f.client.Bucket(bucket).UserProject(userProject).Object(src)
 
 	bucket, dst, err := gcsx.ParseObject(dstpath)
 	if err != nil {
 		return err
 	}
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	dstobj := f.client.Bucket(bucket).UserProject(userProject).Object(dst)
 
 	cp := dstobj.CopierFrom(srcobj)
@@ -192,12 +195,14 @@ func (f *fs) Rename(ctx context.Context, srcpath, dstpath string) error {
 	if err != nil {
 		return err
 	}
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	srcobj := f.client.Bucket(bucket).UserProject(userProject).Object(src)
 
 	bucket, dst, err := gcsx.ParseObject(dstpath)
 	if err != nil {
 		return err
 	}
+	log.Warnf(ctx, "USING USER PROJECT %s", userProject)
 	dstobj := f.client.Bucket(bucket).UserProject(userProject).Object(dst)
 
 	cp := dstobj.CopierFrom(srcobj)
