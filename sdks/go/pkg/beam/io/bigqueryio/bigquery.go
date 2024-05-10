@@ -161,6 +161,19 @@ func (f *queryFn) ProcessElement(ctx context.Context, _ []byte, emit func(beam.X
 		return err
 	}
 	defer client.Close()
+	emulatorHost := os.Getenv("BIGQUERY_EMULATOR_HOST")
+	if emulatorHost != ""{
+		client, err = bigquery.NewClient(
+		    ctx,
+		    f.Project,
+		    option.WithEndpoint(emulatorHost),
+		    option.WithoutAuthentication(),
+		)
+		if err != nil {
+			return err
+		}
+
+	}
 
 	q := client.Query(f.Query)
 	if !f.Options.UseStandardSQL {
@@ -298,6 +311,19 @@ func (f *writeFn) ProcessElement(ctx context.Context, _ int, iter func(*beam.X) 
 		return err
 	}
 	defer client.Close()
+	emulatorHost := os.Getenv("BIGQUERY_EMULATOR_HOST")
+	if emulatorHost != ""{
+		client, err = bigquery.NewClient(
+		    ctx,
+		    f.Project,
+		    option.WithEndpoint(emulatorHost),
+		    option.WithoutAuthentication(),
+		)
+		if err != nil {
+			return err
+		}
+
+	}
 
 	// TODO(herohde) 7/14/2017: should we create datasets? For now, "no".
 
