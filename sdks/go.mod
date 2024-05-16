@@ -18,7 +18,7 @@
 // containers, as well as the entire Go SDK. Placing this file in the repository
 // root is not possible because it causes conflicts with a pre-existing vendor
 // directory.
-module github.com/apache/beam/sdks/v2
+module github.com/LeoCBS/beam/sdks/v2
 
 go 1.20
 
