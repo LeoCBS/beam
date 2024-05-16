@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"os"
 
 	"cloud.google.com/go/bigquery"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
@@ -33,6 +34,7 @@ import (
 	bq "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 )
 
 // writeSizeLimit is the maximum number of rows allowed by BQ in a write.
