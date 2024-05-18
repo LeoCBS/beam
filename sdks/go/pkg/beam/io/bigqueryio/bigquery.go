@@ -315,6 +315,7 @@ func (f *writeFn) ProcessElement(ctx context.Context, _ int, iter func(*beam.X) 
 	defer client.Close()
 	emulatorHost := os.Getenv("BIGQUERY_EMULATOR_HOST")
 	if emulatorHost != ""{
+		fmt.Println("USING EMULATOR")
 		client, err = bigquery.NewClient(
 		    ctx,
 		    f.Project,
