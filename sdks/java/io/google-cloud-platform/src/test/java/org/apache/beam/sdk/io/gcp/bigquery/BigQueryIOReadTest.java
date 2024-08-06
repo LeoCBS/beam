@@ -20,6 +20,7 @@ package org.apache.beam.sdk.io.gcp.bigquery;
 import static org.apache.beam.sdk.io.gcp.bigquery.BigQueryResourceNaming.createTempTableReference;
 import static org.apache.beam.sdk.transforms.display.DisplayDataMatchers.hasDisplayItem;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -45,6 +46,7 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.avro.specific.SpecificRecordBase;
+import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.coders.CoderRegistry;
 import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
@@ -58,6 +60,10 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryResourceNaming.JobType;
 import org.apache.beam.sdk.io.gcp.testing.FakeBigQueryServices;
 import org.apache.beam.sdk.io.gcp.testing.FakeDatasetService;
 import org.apache.beam.sdk.io.gcp.testing.FakeJobService;
+import org.apache.beam.sdk.metrics.Lineage;
+import org.apache.beam.sdk.metrics.MetricNameFilter;
+import org.apache.beam.sdk.metrics.MetricQueryResults;
+import org.apache.beam.sdk.metrics.MetricsFilter;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.ValueProvider;
@@ -301,7 +307,16 @@ public class BigQueryIOReadTest implements Serializable {
 
   private void checkTypedReadQueryObject(
       BigQueryIO.TypedRead<?> read, String query, String kmsKey, String tempDataset) {
-    checkTypedReadQueryObjectWithValidate(read, query, kmsKey, tempDataset, true);
+    checkTypedReadQueryObjectWithValidate(read, query, kmsKey, tempDataset, null, true);
+  }
+
+  private void checkTypedReadQueryObject(
+      BigQueryIO.TypedRead<?> read,
+      String query,
+      String kmsKey,
+      String tempDataset,
+      String tempProject) {
+    checkTypedReadQueryObjectWithValidate(read, query, kmsKey, tempDataset, tempProject, true);
   }
 
   private void checkReadTableObjectWithValidate(
@@ -325,12 +340,29 @@ public class BigQueryIOReadTest implements Serializable {
       String query,
       String kmsKey,
       String tempDataset,
+      String tempProject,
       boolean validate) {
     assertNull(read.getTable());
     assertEquals(query, read.getQuery().get());
     assertEquals(kmsKey, read.getKmsKey());
     assertEquals(tempDataset, read.getQueryTempDataset());
+    assertEquals(tempProject, read.getQueryTempProject());
     assertEquals(validate, read.getValidate());
+  }
+
+  private void checkLineageSourceMetric(PipelineResult pipelineResult, String tableName) {
+    MetricQueryResults lineageMetrics =
+        pipelineResult
+            .metrics()
+            .queryMetrics(
+                MetricsFilter.builder()
+                    .addNameFilter(
+                        MetricNameFilter.named(
+                            Lineage.LINEAGE_NAMESPACE, Lineage.SOURCE_METRIC_NAME))
+                    .build());
+    assertThat(
+        lineageMetrics.getStringSets().iterator().next().getCommitted().getStringSet(),
+        contains("bigquery:" + tableName.replace(':', '.')));
   }
 
   @Before
@@ -394,6 +426,16 @@ public class BigQueryIOReadTest implements Serializable {
             .withKmsKey("kms_key")
             .withQueryTempDataset("temp_dataset");
     checkTypedReadQueryObject(read, "foo_query", "kms_key", "temp_dataset");
+  }
+
+  @Test
+  public void testBuildQueryBasedTypedReadSourceWithTempProject() {
+    BigQueryIO.TypedRead<?> read =
+        BigQueryIO.readTableRows()
+            .fromQuery("foo_query")
+            .withKmsKey("kms_key")
+            .withQueryTempProjectAndDataset("temp_project", "temp_dataset");
+    checkTypedReadQueryObject(read, "foo_query", "kms_key", "temp_dataset", "temp_project");
   }
 
   @Test
@@ -557,7 +599,11 @@ public class BigQueryIOReadTest implements Serializable {
                 new MyData("a", 1L, bd1, bd2),
                 new MyData("b", 2L, bd1, bd2),
                 new MyData("c", 3L, bd1, bd2)));
-    p.run();
+    PipelineResult result = p.run();
+    // Skip when direct runner splits outside of a counters context.
+    if (useTemplateCompatibility) {
+      checkLineageSourceMetric(result, "non-executing-project:somedataset.sometable");
+    }
   }
 
   @Test
@@ -911,6 +957,7 @@ public class BigQueryIOReadTest implements Serializable {
                 QueryPriority.BATCH,
                 null,
                 null,
+                null,
                 null)
             .toSource(stepUuid, TableRowJsonCoder.of(), datumReaderFactoryFn, false);
 
@@ -987,6 +1034,7 @@ public class BigQueryIOReadTest implements Serializable {
                 QueryPriority.BATCH,
                 null,
                 null,
+                null,
                 null)
             .toSource(stepUuid, TableRowJsonCoder.of(), datumReaderFactoryFn, false);
 
@@ -1057,6 +1105,7 @@ public class BigQueryIOReadTest implements Serializable {
                 true /* flattenResults */,
                 true /* useLegacySql */,
                 QueryPriority.BATCH,
+                null,
                 null,
                 null,
                 null)

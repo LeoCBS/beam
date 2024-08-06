@@ -52,6 +52,8 @@ import org.apache.avro.util.Utf8;
 import org.apache.beam.runners.core.metrics.GcpResourceIdentifiers;
 import org.apache.beam.runners.core.metrics.MonitoringInfoConstants;
 import org.apache.beam.runners.core.metrics.ServiceCallMetric;
+import org.apache.beam.sdk.metrics.Counter;
+import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.schemas.Schema.Field;
 import org.apache.beam.sdk.schemas.Schema.FieldType;
@@ -65,6 +67,7 @@ import org.apache.beam.sdk.transforms.SerializableFunctions;
 import org.apache.beam.sdk.util.Preconditions;
 import org.apache.beam.sdk.values.Row;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.Strings;
+import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableList;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableMap;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableSet;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.Iterables;
@@ -497,7 +500,10 @@ public class BigQueryUtils {
             .map(
                 field -> {
                   try {
-                    return convertAvroFormat(field.getType(), record.get(field.getName()), options);
+                    org.apache.avro.Schema.Field avroField =
+                        record.getSchema().getField(field.getName());
+                    Object value = avroField != null ? record.get(avroField.pos()) : null;
+                    return convertAvroFormat(field.getType(), value, options);
                   } catch (Exception cause) {
                     throw new IllegalArgumentException(
                         "Error converting field " + field + ": " + cause.getMessage(), cause);
@@ -709,7 +715,8 @@ public class BigQueryUtils {
                 + jsonBQValue.getClass()
                 + "' to '"
                 + fieldType
-                + "' because the BigQuery type is a List, while the output type is not a collection.");
+                + "' because the BigQuery type is a List, while the output type is not a"
+                + " collection.");
       }
 
       boolean innerTypeIsMap = fieldType.getCollectionElementType().getTypeName().isMapType();
@@ -1076,5 +1083,53 @@ public class BigQueryUtils {
    */
   public static ServiceCallMetric writeCallMetric(TableReference tableReference) {
     return callMetricForMethod(tableReference, "BigQueryBatchWrite");
+  }
+
+  /**
+   * A counter holding a list of counters. Increment the counter will increment every sub-counter it
+   * holds.
+   */
+  static class NestedCounter implements Counter, Serializable {
+
+    private final MetricName name;
+    private final ImmutableList<Counter> counters;
+
+    public NestedCounter(MetricName name, Counter... counters) {
+      this.name = name;
+      this.counters = ImmutableList.copyOf(counters);
+    }
+
+    @Override
+    public void inc() {
+      for (Counter counter : counters) {
+        counter.inc();
+      }
+    }
+
+    @Override
+    public void inc(long n) {
+      for (Counter counter : counters) {
+        counter.inc(n);
+      }
+    }
+
+    @Override
+    public void dec() {
+      for (Counter counter : counters) {
+        counter.dec();
+      }
+    }
+
+    @Override
+    public void dec(long n) {
+      for (Counter counter : counters) {
+        counter.dec(n);
+      }
+    }
+
+    @Override
+    public MetricName getName() {
+      return name;
+    }
   }
 }

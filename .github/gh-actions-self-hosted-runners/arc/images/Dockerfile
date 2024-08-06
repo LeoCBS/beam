@@ -31,7 +31,7 @@ RUN curl -OL https://nodejs.org/dist/v18.16.0/node-v18.16.0-linux-x64.tar.xz && 
     mv /usr/local/node-v18.16.0-linux-x64 /usr/local/node
 ENV PATH="${PATH}:/usr/local/node/bin"
 #Install Go
-ARG go_version=1.21.0
+ARG go_version=1.22.5
 RUN curl -OL https://go.dev/dl/go${go_version}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${go_version}.linux-amd64.tar.gz && \
     rm go${go_version}.linux-amd64.tar.gz
@@ -54,9 +54,9 @@ RUN curl -OL https://github.com/cli/cli/releases/download/v2.31.0/gh_2.31.0_linu
     rm gh_2.31.0_linux_amd64.tar.gz && \
     mv gh_2.31.0_linux_amd64/bin/gh /usr/local/bin 
 #Install GCloud CLI and Kubectl
-RUN curl -OL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-367.0.0-linux-x86_64.tar.gz && \
-    tar -xvf google-cloud-sdk-367.0.0-linux-x86_64.tar.gz && \
-    rm google-cloud-sdk-367.0.0-linux-x86_64.tar.gz && \
+RUN curl -OL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-471.0.0-linux-x86_64.tar.gz && \
+    tar -xvf google-cloud-sdk-471.0.0-linux-x86_64.tar.gz && \
+    rm google-cloud-sdk-471.0.0-linux-x86_64.tar.gz && \
     mv google-cloud-sdk /usr/local/google-cloud-sdk && \
     /usr/local/google-cloud-sdk/install.sh --quiet && \
     /usr/local/google-cloud-sdk/bin/gcloud components install gke-gcloud-auth-plugin && \
