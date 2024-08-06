@@ -21,10 +21,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"time"
-	"os"
 
 	"cloud.google.com/go/bigquery"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
@@ -164,12 +164,12 @@ func (f *queryFn) ProcessElement(ctx context.Context, _ []byte, emit func(beam.X
 	}
 	defer client.Close()
 	emulatorHost := os.Getenv("BIGQUERY_EMULATOR_HOST")
-	if emulatorHost != ""{
+	if emulatorHost != "" {
 		client, err = bigquery.NewClient(
-		    ctx,
-		    f.Project,
-		    option.WithEndpoint(emulatorHost),
-		    option.WithoutAuthentication(),
+			ctx,
+			f.Project,
+			option.WithEndpoint(emulatorHost),
+			option.WithoutAuthentication(),
 		)
 		if err != nil {
 			return err
@@ -314,13 +314,13 @@ func (f *writeFn) ProcessElement(ctx context.Context, _ int, iter func(*beam.X) 
 	}
 	defer client.Close()
 	emulatorHost := os.Getenv("BIGQUERY_EMULATOR_HOST")
-	if emulatorHost != ""{
+	if emulatorHost != "" {
 		fmt.Println("USING EMULATOR")
 		client, err = bigquery.NewClient(
-		    ctx,
-		    f.Project,
-		    option.WithEndpoint(emulatorHost),
-		    option.WithoutAuthentication(),
+			ctx,
+			f.Project,
+			option.WithEndpoint(emulatorHost),
+			option.WithoutAuthentication(),
 		)
 		if err != nil {
 			return err
@@ -385,7 +385,7 @@ func put(ctx context.Context, table *bigquery.Table, t reflect.Type, data []refl
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-
+	fmt.Println("BQ DATAAAAA ", list)
 	return table.Uploader().Put(ctx, list)
 }
 
