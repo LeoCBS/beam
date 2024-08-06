@@ -69,6 +69,7 @@ import com.google.cloud.bigquery.storage.v1.BigQueryReadClient;
 import com.google.cloud.bigquery.storage.v1.BigQueryReadSettings;
 import com.google.cloud.bigquery.storage.v1.BigQueryWriteClient;
 import com.google.cloud.bigquery.storage.v1.BigQueryWriteSettings;
+import com.google.cloud.bigquery.storage.v1.ConnectionWorkerPool;
 import com.google.cloud.bigquery.storage.v1.CreateReadSessionRequest;
 import com.google.cloud.bigquery.storage.v1.CreateWriteStreamRequest;
 import com.google.cloud.bigquery.storage.v1.FinalizeWriteStreamRequest;
@@ -574,7 +575,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
     private final long maxRowBatchSize;
     // aggregate the total time spent in exponential backoff
     private final Counter throttlingMsecs =
-        Metrics.counter(DatasetServiceImpl.class, "throttling-msecs");
+        Metrics.counter(DatasetServiceImpl.class, Metrics.THROTTLE_TIME_COUNTER_NAME);
 
     private @Nullable BoundedExecutorService executor;
 
@@ -1079,6 +1080,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
       }
       StreamingInsertsMetrics streamingInsertsResults =
           BigQuerySinkMetrics.streamingInsertsMetrics();
+      int numFailedRows = 0;
       final Set<Integer> failedIndices = new HashSet<>();
       long retTotalDataSize = 0;
       List<TableDataInsertAllResponse.InsertErrors> allErrors = new ArrayList<>();
@@ -1135,7 +1137,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
                           + " pipeline, and the row will be output as a failed insert.",
                       nextRowSize));
             } else {
-              streamingInsertsResults.incrementFailedRows();
+              numFailedRows += 1;
               errorContainer.add(failedInserts, error, ref, rowsToPublish.get(rowIndex));
               failedIndices.add(rowIndex);
               rowIndex++;
@@ -1223,7 +1225,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
                   retryIds.add(idsToPublish.get(errorIndex));
                 }
               } else {
-                streamingInsertsResults.incrementFailedRows();
+                numFailedRows += 1;
                 errorContainer.add(failedInserts, error, ref, rowsToPublish.get(errorIndex));
               }
             }
@@ -1234,7 +1236,8 @@ public class BigQueryServicesImpl implements BigQueryServices {
           Thread.currentThread().interrupt();
           throw new IOException("Interrupted while inserting " + rowsToPublish);
         } catch (ExecutionException e) {
-          streamingInsertsResults.updateStreamingInsertsMetrics(ref);
+          streamingInsertsResults.updateStreamingInsertsMetrics(
+              ref, rowList.size(), rowList.size());
           throw new RuntimeException(e.getCause());
         }
 
@@ -1276,8 +1279,8 @@ public class BigQueryServicesImpl implements BigQueryServices {
           }
         }
       }
-      streamingInsertsResults.updateSuccessfulAndFailedRows(rowList.size(), allErrors.size());
-      streamingInsertsResults.updateStreamingInsertsMetrics(ref);
+      numFailedRows += allErrors.size();
+      streamingInsertsResults.updateStreamingInsertsMetrics(ref, rowList.size(), numFailedRows);
       if (!allErrors.isEmpty()) {
         throw new IOException("Insert failed: " + allErrors);
       } else {
@@ -1420,6 +1423,14 @@ public class BigQueryServicesImpl implements BigQueryServices {
                   : bqIOMetadata.getBeamJobName(),
               bqIOMetadata.getBeamJobId() == null ? "" : bqIOMetadata.getBeamJobId(),
               bqIOMetadata.getBeamWorkerId() == null ? "" : bqIOMetadata.getBeamWorkerId());
+
+      ConnectionWorkerPool.setOptions(
+          ConnectionWorkerPool.Settings.builder()
+              .setMinConnectionsPerRegion(
+                  options.as(BigQueryOptions.class).getMinConnectionPoolConnections())
+              .setMaxConnectionsPerRegion(
+                  options.as(BigQueryOptions.class).getMaxConnectionPoolConnections())
+              .build());
 
       StreamWriter streamWriter =
           StreamWriter.newBuilder(streamName, newWriteClient)
@@ -1651,13 +1662,30 @@ public class BigQueryServicesImpl implements BigQueryServices {
 
   static class StorageClientImpl implements StorageClient {
 
+    public static final Counter THROTTLING_MSECS =
+        Metrics.counter(StorageClientImpl.class, Metrics.THROTTLE_TIME_COUNTER_NAME);
+
+    private transient long unreportedDelay = 0L;
+
+    private void addToPendingMetrics(long delay) {
+      unreportedDelay += delay;
+    }
+
+    @Override
+    public void reportPendingMetrics() {
+      long delay = unreportedDelay;
+      unreportedDelay = 0L;
+
+      if (delay > 0) {
+        THROTTLING_MSECS.inc(delay);
+      }
+    }
+
     // If client retries ReadRows requests due to RESOURCE_EXHAUSTED error, bump
     // throttlingMsecs according to delay. Runtime can use this information for
     // autoscaling decisions.
     @VisibleForTesting
-    public static class RetryAttemptCounter implements BigQueryReadSettings.RetryAttemptListener {
-      public final Counter throttlingMsecs =
-          Metrics.counter(StorageClientImpl.class, "throttling-msecs");
+    class RetryAttemptCounter implements BigQueryReadSettings.RetryAttemptListener {
 
       @SuppressWarnings("ProtoDurationGetSecondsGetNano")
       @Override
@@ -1671,7 +1699,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
             long delay =
                 retryInfo.getRetryDelay().getSeconds() * 1000
                     + retryInfo.getRetryDelay().getNanos() / 1000000;
-            throttlingMsecs.inc(delay);
+            addToPendingMetrics(delay);
           }
         }
       }
@@ -1683,7 +1711,11 @@ public class BigQueryServicesImpl implements BigQueryServices {
 
     private final BigQueryReadClient client;
 
-    private StorageClientImpl(BigQueryOptions options) throws IOException {
+    private final RetryAttemptCounter listener;
+
+    @VisibleForTesting
+    StorageClientImpl(BigQueryOptions options) throws IOException {
+      listener = new RetryAttemptCounter();
       BigQueryReadSettings.Builder settingsBuilder =
           BigQueryReadSettings.newBuilder()
               .setCredentialsProvider(FixedCredentialsProvider.create(options.getGcpCredential()))
@@ -1691,7 +1723,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
                   BigQueryReadSettings.defaultGrpcTransportProviderBuilder()
                       .setHeaderProvider(USER_AGENT_HEADER_PROVIDER)
                       .build())
-              .setReadRowsRetryAttemptListener(new RetryAttemptCounter());
+              .setReadRowsRetryAttemptListener(listener);
 
       UnaryCallSettings.Builder<CreateReadSessionRequest, ReadSession> createReadSessionSettings =
           settingsBuilder.getStubSettingsBuilder().createReadSessionSettings();
@@ -1719,6 +1751,11 @@ public class BigQueryServicesImpl implements BigQueryServices {
               .build());
 
       this.client = BigQueryReadClient.create(settingsBuilder.build());
+    }
+
+    @VisibleForTesting
+    RetryAttemptCounter getListener() {
+      return listener;
     }
 
     // Since BigQueryReadClient client's methods are final they cannot be mocked with Mockito for
