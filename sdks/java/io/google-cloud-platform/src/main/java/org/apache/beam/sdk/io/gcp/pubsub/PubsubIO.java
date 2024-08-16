@@ -49,6 +49,7 @@ import org.apache.beam.sdk.extensions.protobuf.ProtoDynamicMessageSchema;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubClient.OutgoingMessage;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubClient.SubscriptionPath;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubClient.TopicPath;
+import org.apache.beam.sdk.metrics.Lineage;
 import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.options.ValueProvider.NestedValueProvider;
 import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
@@ -84,6 +85,7 @@ import org.apache.beam.sdk.values.TypeDescriptor;
 import org.apache.beam.sdk.values.ValueInSingleWindow;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.annotations.VisibleForTesting;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.MoreObjects;
+import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableList;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableMap;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.Lists;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.Maps;
@@ -510,6 +512,10 @@ public class PubsubIO {
       } else {
         return topic;
       }
+    }
+
+    public List<String> dataCatalogSegments() {
+      return ImmutableList.of(project, topic);
     }
 
     @Override
@@ -1616,6 +1622,10 @@ public class PubsubIO {
       public void finishBundle() throws IOException {
         for (Map.Entry<PubsubTopic, OutgoingData> entry : output.entrySet()) {
           publish(entry.getKey(), entry.getValue().messages);
+        }
+        // Report lineage for all topics seen
+        for (PubsubTopic topic : output.keySet()) {
+          Lineage.getSinks().add("pubsub", "topic", topic.dataCatalogSegments());
         }
         output = null;
         pubsubClient.close();
