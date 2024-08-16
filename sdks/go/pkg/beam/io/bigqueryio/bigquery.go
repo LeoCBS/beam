@@ -386,7 +386,6 @@ func put(ctx context.Context, table *bigquery.Table, t reflect.Type, data []refl
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	fmt.Println("BQ DATAAAAA ", list)
 	return table.Uploader().Put(ctx, list)
 }
 
