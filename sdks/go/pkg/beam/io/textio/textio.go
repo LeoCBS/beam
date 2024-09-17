@@ -267,6 +267,7 @@ func (fn *readBaseFn) process(ctx context.Context, rt *sdf.LockRTracker, file fi
 		}
 		i += int64(len(line))
 	}
+	fmt.Println("saiuuuuuuuuuuuuuuuuuuuuu =======================================")
 
 	// Claim each line until we claim a line outside the restriction.
 	for rt.TryClaim(i) {
