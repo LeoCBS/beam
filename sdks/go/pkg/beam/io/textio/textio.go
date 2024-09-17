@@ -272,6 +272,7 @@ func (fn *readBaseFn) process(ctx context.Context, rt *sdf.LockRTracker, file fi
 	// Claim each line until we claim a line outside the restriction.
 	for rt.TryClaim(i) {
 		line, err := rd.ReadString('\n')
+		fmt.Println("LINHAAAAAAAA debaixooooooooooo", line)
 		if err == io.EOF {
 			if len(line) != 0 {
 				consumer.Consume(strings.TrimSuffix(line, "\n"))
