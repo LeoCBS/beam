@@ -19,6 +19,7 @@ package textio
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -232,9 +233,11 @@ func (fn *readBaseFn) process(ctx context.Context, rt *sdf.LockRTracker, file fi
 	defer fd.Close()
 
 	rd := bufio.NewReader(fd)
+	fmt.Println("pegou o reader")
 
 	i := rt.GetRestriction().(offsetrange.Restriction).Start
 	if i > 0 {
+		fmt.Println("entrouuuu no forrrr", i)
 		// If restriction's starts after 0, we cannot assume a new line starts
 		// at the beginning of the restriction, so we must search for the first
 		// line beginning at or after restriction.Start. This is done by
@@ -251,6 +254,8 @@ func (fn *readBaseFn) process(ctx context.Context, rt *sdf.LockRTracker, file fi
 			return err
 		}
 		line, err := rd.ReadString('\n') // Read until the first line within the restriction.
+		fmt.Println("LEUUUUUUUUUU")
+		fmt.Println("LINHAAAAAAAA ", line)
 		if err == io.EOF {
 			// No lines start in the restriction but it's still valid, so
 			// finish claiming before returning to avoid errors.
